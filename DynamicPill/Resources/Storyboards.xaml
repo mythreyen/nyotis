@@ -1,0 +1,186 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ── 1. ENTRANCE STORYBOARD (420ms) ──────────────────────────────────
+         Drops from Y = -80 to Y = 16 with BackEase overshoot 0.35
+         ScaleX & ScaleY grow 0.9 -> 1.0; Opacity 0 -> 1 in 180ms
+    ────────────────────────────────────────────────────────────────────── -->
+    <Storyboard x:Key="EntranceStoryboard">
+        <DoubleAnimation Storyboard.TargetName="PillTranslate"
+                         Storyboard.TargetProperty="Y"
+                         From="-80" To="16"
+                         Duration="0:0:0.420">
+            <DoubleAnimation.EasingFunction>
+                <BackEase EasingMode="EaseOut" Amplitude="0.35" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="PillBorder"
+                         Storyboard.TargetProperty="Opacity"
+                         From="0" To="1"
+                         Duration="0:0:0.180" />
+
+        <DoubleAnimation Storyboard.TargetName="PillScale"
+                         Storyboard.TargetProperty="ScaleX"
+                         From="0.9" To="1.0"
+                         Duration="0:0:0.420">
+            <DoubleAnimation.EasingFunction>
+                <BackEase EasingMode="EaseOut" Amplitude="0.35" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="PillScale"
+                         Storyboard.TargetProperty="ScaleY"
+                         From="0.9" To="1.0"
+                         Duration="0:0:0.420">
+            <DoubleAnimation.EasingFunction>
+                <BackEase EasingMode="EaseOut" Amplitude="0.35" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+    </Storyboard>
+
+    <!-- ── 2. RETRACT STORYBOARD (260ms) ────────────────────────────────────
+         CubicEaseIn upward from Y = 16 to -80; Opacity 1 -> 0 after 60ms delay
+    ────────────────────────────────────────────────────────────────────── -->
+    <Storyboard x:Key="RetractStoryboard">
+        <DoubleAnimation Storyboard.TargetName="PillTranslate"
+                         Storyboard.TargetProperty="Y"
+                         From="16" To="-80"
+                         Duration="0:0:0.260">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseIn" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="PillBorder"
+                         Storyboard.TargetProperty="Opacity"
+                         From="1" To="0"
+                         Duration="0:0:0.200"
+                         BeginTime="0:0:0.060" />
+    </Storyboard>
+
+    <!-- ── 3. HOVER IN STORYBOARD (160ms) ───────────────────────────────────
+         Scale 1.0 -> 1.04 (360x64 -> 374x67)
+    ────────────────────────────────────────────────────────────────────── -->
+    <Storyboard x:Key="HoverInStoryboard">
+        <DoubleAnimation Storyboard.TargetName="PillScale"
+                         Storyboard.TargetProperty="ScaleX"
+                         To="1.04"
+                         Duration="0:0:0.160">
+            <DoubleAnimation.EasingFunction>
+                <QuadraticEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="PillScale"
+                         Storyboard.TargetProperty="ScaleY"
+                         To="1.04"
+                         Duration="0:0:0.160">
+            <DoubleAnimation.EasingFunction>
+                <QuadraticEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+    </Storyboard>
+
+    <!-- ── 4. HOVER OUT STORYBOARD (160ms) ──────────────────────────────────
+         Scale 1.04 -> 1.0
+    ────────────────────────────────────────────────────────────────────── -->
+    <Storyboard x:Key="HoverOutStoryboard">
+        <DoubleAnimation Storyboard.TargetName="PillScale"
+                         Storyboard.TargetProperty="ScaleX"
+                         To="1.0"
+                         Duration="0:0:0.160">
+            <DoubleAnimation.EasingFunction>
+                <QuadraticEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="PillScale"
+                         Storyboard.TargetProperty="ScaleY"
+                         To="1.0"
+                         Duration="0:0:0.160">
+            <DoubleAnimation.EasingFunction>
+                <QuadraticEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+    </Storyboard>
+
+    <!-- ── 5. SWAP COLLAPSE (140ms) ─────────────────────────────────────────
+         Squeezes horizontally to 0.82 width; fades content out
+    ────────────────────────────────────────────────────────────────────── -->
+    <Storyboard x:Key="SwapCollapseStoryboard">
+        <DoubleAnimation Storyboard.TargetName="PillScale"
+                         Storyboard.TargetProperty="ScaleX"
+                         To="0.82"
+                         Duration="0:0:0.140">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseIn" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="ContentPanel"
+                         Storyboard.TargetProperty="Opacity"
+                         To="0.0"
+                         Duration="0:0:0.120" />
+    </Storyboard>
+
+    <!-- ── 6. SWAP EXPAND (220ms) ───────────────────────────────────────────
+         Expands from 0.82 to 1.0 with BackEaseOut 0.25; fades new content in
+    ────────────────────────────────────────────────────────────────────── -->
+    <Storyboard x:Key="SwapExpandStoryboard">
+        <DoubleAnimation Storyboard.TargetName="PillScale"
+                         Storyboard.TargetProperty="ScaleX"
+                         To="1.0"
+                         Duration="0:0:0.220">
+            <DoubleAnimation.EasingFunction>
+                <BackEase EasingMode="EaseOut" Amplitude="0.25" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="ContentPanel"
+                         Storyboard.TargetProperty="Opacity"
+                         To="1.0"
+                         Duration="0:0:0.120" />
+    </Storyboard>
+
+    <!-- ── 7. SWIPE DISMISS (180ms) ─────────────────────────────────────────
+         Quick retract upward to Y = -80
+    ────────────────────────────────────────────────────────────────────── -->
+    <Storyboard x:Key="SwipeDismissStoryboard">
+        <DoubleAnimation Storyboard.TargetName="PillTranslate"
+                         Storyboard.TargetProperty="Y"
+                         To="-80"
+                         Duration="0:0:0.180">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseIn" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="PillBorder"
+                         Storyboard.TargetProperty="Opacity"
+                         To="0.0"
+                         Duration="0:0:0.150" />
+    </Storyboard>
+
+    <!-- ── 8. REDUCED MOTION ENTRANCE (Fade only) ─────────────────────────── -->
+    <Storyboard x:Key="ReducedMotionEntranceStoryboard">
+        <DoubleAnimation Storyboard.TargetName="PillTranslate"
+                         Storyboard.TargetProperty="Y"
+                         To="16"
+                         Duration="0:0:0.001" />
+
+        <DoubleAnimation Storyboard.TargetName="PillBorder"
+                         Storyboard.TargetProperty="Opacity"
+                         From="0" To="1"
+                         Duration="0:0:0.250" />
+    </Storyboard>
+
+    <!-- ── 9. REDUCED MOTION RETRACT (Fade only) ──────────────────────────── -->
+    <Storyboard x:Key="ReducedMotionRetractStoryboard">
+        <DoubleAnimation Storyboard.TargetName="PillBorder"
+                         Storyboard.TargetProperty="Opacity"
+                         From="1" To="0"
+                         Duration="0:0:0.250" />
+    </Storyboard>
+
+</ResourceDictionary>
