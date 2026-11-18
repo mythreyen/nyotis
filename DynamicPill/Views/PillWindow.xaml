@@ -1,0 +1,179 @@
+<Window x:Class="DynamicPill.Views.PillWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DynamicPill Overlay"
+        Width="420" Height="120"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Resources/Theme.Dark.xaml" />
+                <ResourceDictionary Source="/Resources/Storyboards.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Vector Close Button Style matching 24dp design -->
+            <Style x:Key="VectorCloseButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="24" />
+                <Setter Property="Height" Value="24" />
+                <Setter Property="Background" Value="{DynamicResource CloseButtonBackgroundBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Opacity" Value="0" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="BtnBorder"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="12"
+                                    Width="24" Height="24">
+                                <Path HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Stroke="{DynamicResource CloseButtonForegroundBrush}"
+                                      StrokeThickness="2.4"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      Data="M 6,6 L 14,14 M 14,6 L 6,14" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource CloseButtonHoverBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- Canvas host to keep layout fixed while the pill animates inside -->
+    <Canvas ClipToBounds="True">
+        <!-- THE PILL CONTAINER (360 x 64 dp) -->
+        <Border x:Name="PillBorder"
+                Width="360" Height="64"
+                Canvas.Left="30"
+                Canvas.Top="0"
+                CornerRadius="32"
+                Background="{DynamicResource PillBackgroundBrush}"
+                BorderBrush="{DynamicResource PillBorderBrush}"
+                BorderThickness="1"
+                Opacity="0"
+                RenderTransformOrigin="0.5,0"
+                Cursor="Hand"
+                MouseEnter="Pill_MouseEnter"
+                MouseLeave="Pill_MouseLeave"
+                MouseLeftButtonUp="Pill_Click"
+                MouseLeftButtonDown="Pill_MouseDown"
+                MouseMove="Pill_MouseMove">
+
+            <Border.Effect>
+                <DropShadowEffect Color="{DynamicResource PillShadowColor}"
+                                  BlurRadius="36"
+                                  ShadowDepth="12"
+                                  Opacity="0.6"
+                                  Direction="270" />
+            </Border.Effect>
+
+            <Border.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="PillScale" ScaleX="1.0" ScaleY="1.0" />
+                    <TranslateTransform x:Name="PillTranslate" Y="-80" />
+                </TransformGroup>
+            </Border.RenderTransform>
+
+            <Grid x:Name="ContentPanel" Margin="14,0,22,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Column 0: App Icon with optional Burst Badge -->
+                <Grid Grid.Column="0" Width="44" Height="36"
+                      VerticalAlignment="Center" Margin="0,0,8,0">
+
+                    <!-- Fallback Icon with App Initial -->
+                    <Border x:Name="FallbackIcon"
+                            Width="36" Height="36"
+                            CornerRadius="10"
+                            HorizontalAlignment="Left"
+                            Visibility="Visible">
+                        <Border.Background>
+                            <SolidColorBrush x:Name="FallbackIconBrush" Color="#FF2F66E8" />
+                        </Border.Background>
+                        <TextBlock x:Name="FallbackInitialText"
+                                   Text="M"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+
+                    <!-- Real App Icon -->
+                    <Border x:Name="AppIconHost"
+                            Width="36" Height="36"
+                            CornerRadius="10"
+                            HorizontalAlignment="Left"
+                            ClipToBounds="True"
+                            Visibility="Collapsed">
+                        <Image x:Name="AppIconImage"
+                               Width="36" Height="36"
+                               Stretch="UniformToFill" />
+                    </Border>
+
+                    <!-- Burst Merge Count Badge (Top-Right of Icon) -->
+                    <Border x:Name="BurstBadge"
+                            Width="18" Height="18"
+                            CornerRadius="9"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Margin="0,-3,0,0"
+                            Background="{DynamicResource BurstBadgeBackgroundBrush}"
+                            BorderBrush="{DynamicResource BurstBadgeBorderBrush}"
+                            BorderThickness="2"
+                            Visibility="Collapsed">
+                        <TextBlock x:Name="BurstCountText"
+                                   Text="4"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource BurstBadgeForegroundBrush}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                </Grid>
+
+                <!-- Column 1: Title and Body Text -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="4,0,8,0">
+                    <TextBlock x:Name="TitleText"
+                               Style="{DynamicResource TitleTextStyle}"
+                               Text="Maya Chen" />
+                    <TextBlock x:Name="BodyText"
+                               Style="{DynamicResource BodyTextStyle}"
+                               Text="Are we still on for the 3 pm review?"
+                               Margin="0,2,0,0" />
+                </StackPanel>
+
+                <!-- Column 2: Timestamp (idle/compact) and Close Button (hover) -->
+                <Grid Grid.Column="2" VerticalAlignment="Center">
+                    <TextBlock x:Name="TimestampText"
+                               Style="{DynamicResource TimestampTextStyle}"
+                               Text="now" />
+
+                    <Button x:Name="CloseButton"
+                            Style="{StaticResource VectorCloseButtonStyle}"
+                            Click="CloseButton_Click"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center" />
+                </Grid>
+            </Grid>
+        </Border>
+    </Canvas>
+</Window>

@@ -1,0 +1,21 @@
+## Visual Studio / .NET build outputs
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+.vs/
+
+## Logs and temporary files
+*.log
+err.txt
+out.txt
+*.tmp
+
+## OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
