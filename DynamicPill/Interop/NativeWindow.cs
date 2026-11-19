@@ -17,6 +17,8 @@ public sealed class NativeWindow
         _window = window;
     }
 
+    public IntPtr Handle => _hwnd;
+
     public void Initialize()
     {
         _hwnd = new WindowInteropHelper(_window).Handle;
@@ -41,7 +43,7 @@ public sealed class NativeWindow
         _isClickThrough = enable;
     }
 
-    public void PositionTopCenter(double windowWidthDip = 420, double windowHeightDip = 120, double topOffsetDip = 0)
+    public void PositionTopCenter(double windowWidthDip = 480, double windowHeightDip = 130, double topOffsetDip = 0)
     {
         GetCursorPos(out POINT cursorPos);
         IntPtr hMonitor = MonitorFromPoint(cursorPos, MONITOR_DEFAULTTONEAREST);
@@ -75,87 +77,26 @@ public sealed class NativeWindow
 
     public bool EnableAcrylic(uint tintColorAABBGGRR = 0x011C1C20)
     {
-        if (_hwnd == IntPtr.Zero)
-            return false;
-
-        // First attempt: DWM ACCENT_ENABLE_BLURBEHIND (State 3).
-        // This provides clean Gaussian blur behind all non-zero alpha pixels of the layered window
-        // without drawing any rectangular gradient wash outside the pill's rounded geometry.
-        try
-        {
-            var accent = new AccentPolicy
-            {
-                AccentState = AccentState.ACCENT_ENABLE_BLURBEHIND,
-                AccentFlags = 0,
-                GradientColor = 0,
-            };
-
-            int accentSize = Marshal.SizeOf(accent);
-            IntPtr accentPtr = Marshal.AllocHGlobal(accentSize);
-            try
-            {
-                Marshal.StructureToPtr(accent, accentPtr, false);
-                var data = new WindowCompositionAttributeData
-                {
-                    Attribute = WCA_ACCENT_POLICY,
-                    Data = accentPtr,
-                    SizeOfData = accentSize
-                };
-                if (SetWindowCompositionAttribute(_hwnd, ref data))
-                    return true;
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(accentPtr);
-            }
-        }
-        catch { }
-
-        // Second attempt: ACCENT_ENABLE_ACRYLICBLURBEHIND (State 4) with AccentFlags = 2
-        try
-        {
-            var accent = new AccentPolicy
-            {
-                AccentState = AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND,
-                AccentFlags = 2,
-                GradientColor = tintColorAABBGGRR,
-            };
-
-            int accentSize = Marshal.SizeOf(accent);
-            IntPtr accentPtr = Marshal.AllocHGlobal(accentSize);
-            try
-            {
-                Marshal.StructureToPtr(accent, accentPtr, false);
-                var data = new WindowCompositionAttributeData
-                {
-                    Attribute = WCA_ACCENT_POLICY,
-                    Data = accentPtr,
-                    SizeOfData = accentSize
-                };
-                return SetWindowCompositionAttribute(_hwnd, ref data);
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(accentPtr);
-            }
-        }
-        catch
-        {
-            return false;
-        }
+        // On Windows 10 & 11, SetWindowCompositionAttribute blurs the ENTIRE rectangular HWND,
+        // which creates an unsightly hard-edged rectangular box around non-rectangular (pill) windows.
+        // Modern WPF per-pixel layered window alpha renders the clean rounded pill without any bounding rectangle.
+        return true;
     }
 
-    public static bool ShouldSuppressNotifications()
+    public static bool ShouldSuppressNotifications(bool isExplicitTrigger = false)
     {
+        if (isExplicitTrigger)
+            return false;
+
         int hr = SHQueryUserNotificationState(out var state);
         if (hr != 0) return false;
+
+        App.Log($"[NativeWindow] SHQueryUserNotificationState = {state}");
 
         return state switch
         {
             QUERY_USER_NOTIFICATION_STATE.QUNS_RUNNING_D3D_FULL_SCREEN => true,
             QUERY_USER_NOTIFICATION_STATE.QUNS_PRESENTATION_MODE => true,
-            QUERY_USER_NOTIFICATION_STATE.QUNS_BUSY => true,
-            QUERY_USER_NOTIFICATION_STATE.QUNS_QUIET_TIME => true,
             _ => false
         };
     }
