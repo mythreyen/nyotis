@@ -55,11 +55,11 @@
 
     <!-- Root layout grid to allow natural symmetrical center expansion -->
     <Grid x:Name="RootGrid" ClipToBounds="False">
-        <!-- THE PILL CONTAINER (Initial compact size: 200 x 38 dp; expands on hover to 360 x 64 dp) -->
+        <!-- THE PILL CONTAINER (Compact state: 260 x 46 dp; expands on hover to 360 x 64 dp) -->
         <Border x:Name="PillBorder"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
-                Width="200" Height="38"
+                Width="260" Height="46"
                 CornerRadius="32"
                 Background="{DynamicResource PillBackgroundBrush}"
                 BorderBrush="{DynamicResource PillBorderBrush}"
@@ -88,7 +88,7 @@
                 </TransformGroup>
             </Border.RenderTransform>
 
-            <Grid x:Name="ContentPanel" Margin="12,0,14,0">
+            <Grid x:Name="ContentPanel" Margin="10,0,18,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -96,11 +96,11 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Column 0: App Icon with optional Burst Badge -->
-                <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
 
-                    <!-- Fallback Icon with App Initial (26x26 compact, 36x36 hover) -->
+                    <!-- Fallback Icon with App Initial (28x28 compact, 36x36 hover) -->
                     <Border x:Name="FallbackIcon"
-                            Width="26" Height="26"
+                            Width="28" Height="28"
                             CornerRadius="8"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
@@ -119,7 +119,7 @@
 
                     <!-- Real App Icon -->
                     <Border x:Name="AppIconHost"
-                            Width="26" Height="26"
+                            Width="28" Height="28"
                             CornerRadius="8"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
@@ -151,9 +151,10 @@
                 </Grid>
 
                 <!-- Column 1: Title and expandable Body Text -->
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,8,0">
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
                     <TextBlock x:Name="TitleText"
                                Style="{DynamicResource TitleTextStyle}"
+                               FontSize="13.5"
                                Text="Maya Chen" />
                     <Border x:Name="BodyHost" Height="0" Opacity="0" ClipToBounds="True">
                         <TextBlock x:Name="BodyText"
@@ -167,6 +168,7 @@
                 <Grid Grid.Column="2" VerticalAlignment="Center">
                     <TextBlock x:Name="TimestampText"
                                Style="{DynamicResource TimestampTextStyle}"
+                               FontSize="11"
                                Text="now" />
 
                     <Button x:Name="CloseButton"

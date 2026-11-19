@@ -77,12 +77,14 @@ public partial class PillWindow : Window
 
     public void ResetToCompactState()
     {
-        PillBorder.Width = 200;
-        PillBorder.Height = 38;
-        FallbackIcon.Width = 26;
-        FallbackIcon.Height = 26;
-        AppIconHost.Width = 26;
-        AppIconHost.Height = 26;
+        PillBorder.Width = 260;
+        PillBorder.Height = 46;
+        ContentPanel.Margin = new Thickness(10, 0, 18, 0);
+        FallbackIcon.Width = 28;
+        FallbackIcon.Height = 28;
+        AppIconHost.Width = 28;
+        AppIconHost.Height = 28;
+        TitleText.FontSize = 13.5;
         BodyHost.Height = 0;
         BodyHost.Opacity = 0;
         CloseButton.Opacity = 0;
@@ -237,10 +239,12 @@ public partial class PillWindow : Window
         {
             PillBorder.Width = 360;
             PillBorder.Height = 64;
+            ContentPanel.Margin = new Thickness(14, 0, 20, 0);
             FallbackIcon.Width = 36;
             FallbackIcon.Height = 36;
             AppIconHost.Width = 36;
             AppIconHost.Height = 36;
+            TitleText.FontSize = 14;
             BodyHost.Height = 20;
             BodyHost.Opacity = 1.0;
             CloseButton.Opacity = 1.0;
