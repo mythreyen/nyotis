@@ -59,48 +59,170 @@
                          BeginTime="0:0:0.060" />
     </Storyboard>
 
-    <!-- ── 3. HOVER IN STORYBOARD (160ms) ───────────────────────────────────
-         Scale 1.0 -> 1.04 (360x64 -> 374x67)
+    <!-- ── 3. HOVER IN (EXPAND) STORYBOARD (260ms) ──────────────────────────
+         Fluidly expands initial compact pill (200x38) -> full notification (360x64)
+         Icon expands 26 -> 36; Body text slides & fades in; Close button appears
     ────────────────────────────────────────────────────────────────────── -->
     <Storyboard x:Key="HoverInStoryboard">
-        <DoubleAnimation Storyboard.TargetName="PillScale"
-                         Storyboard.TargetProperty="ScaleX"
-                         To="1.04"
-                         Duration="0:0:0.160">
+        <DoubleAnimation Storyboard.TargetName="PillBorder"
+                         Storyboard.TargetProperty="Width"
+                         To="360"
+                         Duration="0:0:0.260">
             <DoubleAnimation.EasingFunction>
-                <QuadraticEase EasingMode="EaseOut" />
+                <CubicEase EasingMode="EaseOut" />
             </DoubleAnimation.EasingFunction>
         </DoubleAnimation>
 
-        <DoubleAnimation Storyboard.TargetName="PillScale"
-                         Storyboard.TargetProperty="ScaleY"
-                         To="1.04"
-                         Duration="0:0:0.160">
+        <DoubleAnimation Storyboard.TargetName="PillBorder"
+                         Storyboard.TargetProperty="Height"
+                         To="64"
+                         Duration="0:0:0.260">
             <DoubleAnimation.EasingFunction>
-                <QuadraticEase EasingMode="EaseOut" />
+                <CubicEase EasingMode="EaseOut" />
             </DoubleAnimation.EasingFunction>
         </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="FallbackIcon"
+                         Storyboard.TargetProperty="Width"
+                         To="36"
+                         Duration="0:0:0.240">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+        <DoubleAnimation Storyboard.TargetName="FallbackIcon"
+                         Storyboard.TargetProperty="Height"
+                         To="36"
+                         Duration="0:0:0.240">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="AppIconHost"
+                         Storyboard.TargetProperty="Width"
+                         To="36"
+                         Duration="0:0:0.240">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+        <DoubleAnimation Storyboard.TargetName="AppIconHost"
+                         Storyboard.TargetProperty="Height"
+                         To="36"
+                         Duration="0:0:0.240">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="BodyHost"
+                         Storyboard.TargetProperty="Height"
+                         To="20"
+                         Duration="0:0:0.220"
+                         BeginTime="0:0:0.040">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="BodyHost"
+                         Storyboard.TargetProperty="Opacity"
+                         To="1.0"
+                         Duration="0:0:0.200"
+                         BeginTime="0:0:0.060" />
+
+        <DoubleAnimation Storyboard.TargetName="CloseButton"
+                         Storyboard.TargetProperty="Opacity"
+                         To="1.0"
+                         Duration="0:0:0.180"
+                         BeginTime="0:0:0.060" />
+
+        <DoubleAnimation Storyboard.TargetName="TimestampText"
+                         Storyboard.TargetProperty="Opacity"
+                         To="0.0"
+                         Duration="0:0:0.120" />
     </Storyboard>
 
-    <!-- ── 4. HOVER OUT STORYBOARD (160ms) ──────────────────────────────────
-         Scale 1.04 -> 1.0
+    <!-- ── 4. HOVER OUT (COLLAPSE) STORYBOARD (240ms) ─────────────────────────
+         Fluidly contracts full notification (360x64) -> compact pill (200x38)
+         Icon shrinks 36 -> 26; Body text fades & collapses; Timestamp returns
     ────────────────────────────────────────────────────────────────────── -->
     <Storyboard x:Key="HoverOutStoryboard">
-        <DoubleAnimation Storyboard.TargetName="PillScale"
-                         Storyboard.TargetProperty="ScaleX"
-                         To="1.0"
-                         Duration="0:0:0.160">
+        <DoubleAnimation Storyboard.TargetName="BodyHost"
+                         Storyboard.TargetProperty="Opacity"
+                         To="0.0"
+                         Duration="0:0:0.120" />
+
+        <DoubleAnimation Storyboard.TargetName="BodyHost"
+                         Storyboard.TargetProperty="Height"
+                         To="0"
+                         Duration="0:0:0.180">
             <DoubleAnimation.EasingFunction>
-                <QuadraticEase EasingMode="EaseOut" />
+                <CubicEase EasingMode="EaseIn" />
             </DoubleAnimation.EasingFunction>
         </DoubleAnimation>
 
-        <DoubleAnimation Storyboard.TargetName="PillScale"
-                         Storyboard.TargetProperty="ScaleY"
+        <DoubleAnimation Storyboard.TargetName="CloseButton"
+                         Storyboard.TargetProperty="Opacity"
+                         To="0.0"
+                         Duration="0:0:0.120" />
+
+        <DoubleAnimation Storyboard.TargetName="TimestampText"
+                         Storyboard.TargetProperty="Opacity"
                          To="1.0"
-                         Duration="0:0:0.160">
+                         Duration="0:0:0.180"
+                         BeginTime="0:0:0.060" />
+
+        <DoubleAnimation Storyboard.TargetName="PillBorder"
+                         Storyboard.TargetProperty="Width"
+                         To="200"
+                         Duration="0:0:0.240">
             <DoubleAnimation.EasingFunction>
-                <QuadraticEase EasingMode="EaseOut" />
+                <CubicEase EasingMode="EaseInOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="PillBorder"
+                         Storyboard.TargetProperty="Height"
+                         To="38"
+                         Duration="0:0:0.240">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseInOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="FallbackIcon"
+                         Storyboard.TargetProperty="Width"
+                         To="26"
+                         Duration="0:0:0.220">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseInOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+        <DoubleAnimation Storyboard.TargetName="FallbackIcon"
+                         Storyboard.TargetProperty="Height"
+                         To="26"
+                         Duration="0:0:0.220">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseInOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+
+        <DoubleAnimation Storyboard.TargetName="AppIconHost"
+                         Storyboard.TargetProperty="Width"
+                         To="26"
+                         Duration="0:0:0.220">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseInOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+        <DoubleAnimation Storyboard.TargetName="AppIconHost"
+                         Storyboard.TargetProperty="Height"
+                         To="26"
+                         Duration="0:0:0.220">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseInOut" />
             </DoubleAnimation.EasingFunction>
         </DoubleAnimation>
     </Storyboard>

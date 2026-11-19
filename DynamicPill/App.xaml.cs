@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using DynamicPill.Models;
 using DynamicPill.Services;
 using DynamicPill.Views;
@@ -31,11 +32,16 @@ public partial class App : Application
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern bool DestroyIcon(IntPtr handle);
 
-    private static void Log(string message)
+    public static readonly string LogFilePath = Path.Combine(AppContext.BaseDirectory, "app_debug.log");
+
+    public static void Log(string message)
     {
         try
         {
-            File.AppendAllText("app_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] {message}\n");
+            string line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
+            File.AppendAllText(LogFilePath, line + "\r\n");
+            try { File.AppendAllText("app_debug.log", line + "\r\n"); } catch { }
+            Debug.WriteLine(line);
         }
         catch { }
     }
@@ -56,23 +62,49 @@ public partial class App : Application
         Log("App starting up...");
 
         // 1. Single-instance check
-        _singleInstanceMutex = new Mutex(true, MutexName, out bool isNewInstance);
-        if (!isNewInstance)
+        try
         {
-            Log("Another instance is running. Exiting.");
-            // Send trigger to existing instance via pipe if possible
-            try
+            _singleInstanceMutex = new Mutex(true, MutexName, out bool isNewInstance);
+            if (!isNewInstance)
             {
-                using var client = new NamedPipeClientStream(".", "DynamicPill_Pipe", PipeDirection.Out);
-                client.Connect(400);
-                using var writer = new StreamWriter(client, Encoding.UTF8);
-                writer.WriteLine("DynamicPill|Another instance was launched. Pill is active here!|DynamicPill");
-                writer.Flush();
+                try
+                {
+                    if (_singleInstanceMutex.WaitOne(TimeSpan.Zero, true))
+                    {
+                        isNewInstance = true;
+                    }
+                }
+                catch (AbandonedMutexException)
+                {
+                    isNewInstance = true;
+                }
             }
-            catch { }
 
-            Shutdown();
-            return;
+            if (!isNewInstance)
+            {
+                Log("Another instance is running. Exiting.");
+                // Send trigger to existing instance via pipe if possible
+                try
+                {
+                    using var client = new NamedPipeClientStream(".", "DynamicPill_Pipe", PipeDirection.Out);
+                    client.Connect(400);
+                    using var writer = new StreamWriter(client, Encoding.UTF8);
+                    writer.WriteLine("DynamicPill|Another instance was launched. Pill is active here!|DynamicPill");
+                    writer.Flush();
+                }
+                catch { }
+
+                Environment.Exit(0);
+                return;
+            }
+        }
+        catch (AbandonedMutexException)
+        {
+            Log("Mutex was abandoned by previous instance. Acquired ownership.");
+        }
+        catch (Exception ex)
+        {
+            Log($"[Mutex] Warning: {ex.Message}");
         }
 
         Log("Single instance check passed.");
@@ -181,7 +213,108 @@ public partial class App : Application
                     string? line = await reader.ReadLineAsync(token);
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        Log($"IPC received notification: {line}");
+                        Log($"IPC received line: {line}");
+
+                        if (line.StartsWith("CMD:SNAPSHOT|"))
+                        {
+                            var savePath = line.Substring("CMD:SNAPSHOT|".Length);
+                            Dispatcher.Invoke(() =>
+                            {
+                                try
+                                {
+                                    if (_pillWindow != null)
+                                    {
+                                        int w = (int)Math.Max(1, _pillWindow.ActualWidth > 0 ? _pillWindow.ActualWidth : _pillWindow.Width);
+                                        int h = (int)Math.Max(1, _pillWindow.ActualHeight > 0 ? _pillWindow.ActualHeight : _pillWindow.Height);
+                                        var rtb = new RenderTargetBitmap(w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                                        rtb.Render(_pillWindow);
+                                        var encoder = new PngBitmapEncoder();
+                                        encoder.Frames.Add(BitmapFrame.Create(rtb));
+                                        using var fs = File.Create(savePath);
+                                        encoder.Save(fs);
+                                        Log($"[Snapshot] Saved visual snapshot to {savePath} ({w}x{h})");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log($"[Snapshot] Error saving snapshot: {ex.Message}");
+                                }
+                            });
+                            continue;
+                        }
+
+                        if (line == "CMD:OPEN_SETTINGS")
+                        {
+                            Dispatcher.Invoke(() =>
+                            {
+                                if (_settingsWindow == null || !_settingsWindow.IsLoaded)
+                                {
+                                    _settingsWindow = new SettingsWindow(_pillWindow!, _presenter!);
+                                    _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+                                    _settingsWindow.Show();
+                                    Log("[IPC] Settings window opened.");
+                                }
+                                else
+                                {
+                                    _settingsWindow.Activate();
+                                }
+                            });
+                            continue;
+                        }
+
+                        if (line.StartsWith("CMD:SNAPSHOT_SETTINGS|"))
+                        {
+                            var savePath = line.Substring("CMD:SNAPSHOT_SETTINGS|".Length);
+                            Dispatcher.Invoke(() =>
+                            {
+                                try
+                                {
+                                    if (_settingsWindow != null && _settingsWindow.IsLoaded)
+                                    {
+                                        int w = (int)Math.Max(1, _settingsWindow.ActualWidth > 0 ? _settingsWindow.ActualWidth : _settingsWindow.Width);
+                                        int h = (int)Math.Max(1, _settingsWindow.ActualHeight > 0 ? _settingsWindow.ActualHeight : _settingsWindow.Height);
+                                        var rtb = new RenderTargetBitmap(w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                                        rtb.Render(_settingsWindow);
+                                        var encoder = new PngBitmapEncoder();
+                                        encoder.Frames.Add(BitmapFrame.Create(rtb));
+                                        using var fs = File.Create(savePath);
+                                        encoder.Save(fs);
+                                        Log($"[Snapshot] Saved settings visual snapshot to {savePath} ({w}x{h})");
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log($"[Snapshot] Error saving settings snapshot: {ex.Message}");
+                                }
+                            });
+                            continue;
+                        }
+
+                        if (line == "CMD:CLOSE_SETTINGS")
+                        {
+                            Dispatcher.Invoke(() =>
+                            {
+                                _settingsWindow?.Close();
+                                _settingsWindow = null;
+                                Log("[IPC] Settings window closed.");
+                            });
+                            continue;
+                        }
+
+                        if (line == "CMD:TRIGGER_HOVER")
+                        {
+                            Dispatcher.Invoke(() => _pillWindow?.TriggerHover(true));
+                            Log("[IPC] Triggered hover expansion.");
+                            continue;
+                        }
+
+                        if (line == "CMD:TRIGGER_UNHOVER")
+                        {
+                            Dispatcher.Invoke(() => _pillWindow?.TriggerHover(false));
+                            Log("[IPC] Triggered unhover collapse.");
+                            continue;
+                        }
+
                         var parts = line.Split('|');
                         string title = parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]) ? parts[0] : "DynamicPill";
                         string body = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]) ? parts[1] : "Notification";
@@ -192,7 +325,7 @@ public partial class App : Application
                             _presenter?.Enqueue(new PillItem
                             {
                                 Id = (uint)Random.Shared.Next(),
-                                AppId = "DynamicPill.IPC",
+                                AppId = $"DynamicPill.{appName}",
                                 AppName = appName,
                                 Title = title,
                                 Body = body,

@@ -36,7 +36,7 @@
     <SolidColorBrush x:Key="BurstBadgeForegroundBrush" Color="#FFFFFFFF" />
     <SolidColorBrush x:Key="BurstBadgeBorderBrush" Color="#FFF5F5F7" />
 
-    <Color x:Key="PillShadowColor">#47141828</Color>
+    <Color x:Key="PillShadowColor">#25000000</Color>
 
     <FontFamily x:Key="PillFontFamily">Segoe UI Variable Text, Segoe UI, Inter, sans-serif</FontFamily>
 
