@@ -2,7 +2,7 @@
 
 A modern, fluid Dynamic Island / Pill notification overlay for Windows built with .NET 8, WPF, and Win32 Interop.
 
-## ✨ Features
+## Features
 
 - **Fluid Pill Overlay**: Anchored at the top-center of the active display with smooth entrance, swap, expand, and retract animations.
 - **Acrylic Backdrop**: Native Windows DWM acrylic / blurbehind styling with rounded pill aesthetics.
@@ -17,7 +17,7 @@ A modern, fluid Dynamic Island / Pill notification overlay for Windows built wit
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Windows 10 (version 19041+) or Windows 11
@@ -40,7 +40,7 @@ Start-Process explorer.exe ".\DynamicPill\bin\Debug\net8.0-windows10.0.19041.0\D
 
 ---
 
-## 🔔 Testing Notifications
+## Testing Notifications
 
 Send a test notification directly to the overlay using the included PowerShell script:
 
@@ -51,11 +51,11 @@ Send a test notification directly to the overlay using the included PowerShell s
 Or trigger built-in demo animations from the System Tray icon:
 1. Click the **`^` (Show hidden icons)** chevron in the Windows taskbar.
 2. Right-click the **DynamicPill** icon.
-3. Select **🔔 Test Notification (Compact)**, **🔄 Test Swap Animation**, or **📬 Test Merged Burst**.
+3. Select **Test Notification (Compact)**, **Test Swap Animation**, or **Test Merged Burst**.
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 ├── DynamicPill/
