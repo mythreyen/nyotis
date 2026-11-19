@@ -75,16 +75,26 @@ public partial class PillWindow : Window
         };
     }
 
+    private void PillBorder_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Enforce perfect mathematical capsule geometry: radius is ALWAYS exactly half height
+        double radius = e.NewSize.Height / 2.0;
+        PillBorder.CornerRadius = new CornerRadius(radius);
+    }
+
     public void ResetToCompactState()
     {
-        PillBorder.Width = 260;
-        PillBorder.Height = 46;
-        ContentPanel.Margin = new Thickness(10, 0, 18, 0);
-        FallbackIcon.Width = 28;
-        FallbackIcon.Height = 28;
-        AppIconHost.Width = 28;
-        AppIconHost.Height = 28;
-        TitleText.FontSize = 13.5;
+        PillBorder.Width = 184;
+        PillBorder.Height = 40;
+        PillBorder.CornerRadius = new CornerRadius(20);
+        ContentPanel.Margin = new Thickness(8, 0, 14, 0);
+        FallbackIcon.Width = 24;
+        FallbackIcon.Height = 24;
+        FallbackIcon.CornerRadius = new CornerRadius(12);
+        AppIconHost.Width = 24;
+        AppIconHost.Height = 24;
+        AppIconHost.CornerRadius = new CornerRadius(12);
+        TitleText.FontSize = 13;
         BodyHost.Height = 0;
         BodyHost.Opacity = 0;
         CloseButton.Opacity = 0;
@@ -230,6 +240,10 @@ public partial class PillWindow : Window
         if (TryFindResource("PillHoverBackgroundBrush") is Brush hoverBg)
             PillBorder.Background = hoverBg;
 
+        // Smooth squircle icon on expansion
+        FallbackIcon.CornerRadius = new CornerRadius(10);
+        AppIconHost.CornerRadius = new CornerRadius(10);
+
         if (!_useReducedMotion)
         {
             var hoverIn = FindStoryboard("HoverInStoryboard");
@@ -239,6 +253,7 @@ public partial class PillWindow : Window
         {
             PillBorder.Width = 360;
             PillBorder.Height = 64;
+            PillBorder.CornerRadius = new CornerRadius(32);
             ContentPanel.Margin = new Thickness(14, 0, 20, 0);
             FallbackIcon.Width = 36;
             FallbackIcon.Height = 36;
@@ -260,6 +275,10 @@ public partial class PillWindow : Window
         _state = PillState.Showing;
         _presenter?.NotifyUnhovered();
         _isDragging = false;
+
+        // Return icon to circle in compact pill
+        FallbackIcon.CornerRadius = new CornerRadius(12);
+        AppIconHost.CornerRadius = new CornerRadius(12);
 
         if (TryFindResource("PillBorderBrush") is Brush normalBrush)
             PillBorder.BorderBrush = normalBrush;

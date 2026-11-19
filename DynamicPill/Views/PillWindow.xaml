@@ -55,12 +55,13 @@
 
     <!-- Root layout grid to allow natural symmetrical center expansion -->
     <Grid x:Name="RootGrid" ClipToBounds="False">
-        <!-- THE PILL CONTAINER (Compact state: 260 x 46 dp; expands on hover to 360 x 64 dp) -->
+        <!-- THE PILL CONTAINER (True Dynamic Island pill: 184 x 40 dp; expands on hover to 360 x 64 dp) -->
         <Border x:Name="PillBorder"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
-                Width="260" Height="46"
-                CornerRadius="32"
+                Width="184" Height="40"
+                CornerRadius="20"
+                SizeChanged="PillBorder_SizeChanged"
                 Background="{DynamicResource PillBackgroundBrush}"
                 BorderBrush="{DynamicResource PillBorderBrush}"
                 BorderThickness="1"
@@ -88,7 +89,7 @@
                 </TransformGroup>
             </Border.RenderTransform>
 
-            <Grid x:Name="ContentPanel" Margin="10,0,18,0">
+            <Grid x:Name="ContentPanel" Margin="8,0,14,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -96,12 +97,12 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Column 0: App Icon with optional Burst Badge -->
-                <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
 
-                    <!-- Fallback Icon with App Initial (28x28 compact, 36x36 hover) -->
+                    <!-- Fallback Icon with App Initial (Circular 24x24 compact, 36x36 hover) -->
                     <Border x:Name="FallbackIcon"
-                            Width="28" Height="28"
-                            CornerRadius="8"
+                            Width="24" Height="24"
+                            CornerRadius="12"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Visibility="Visible">
@@ -110,7 +111,7 @@
                         </Border.Background>
                         <TextBlock x:Name="FallbackInitialText"
                                    Text="M"
-                                   FontSize="13"
+                                   FontSize="12"
                                    FontWeight="SemiBold"
                                    Foreground="White"
                                    HorizontalAlignment="Center"
@@ -119,8 +120,8 @@
 
                     <!-- Real App Icon -->
                     <Border x:Name="AppIconHost"
-                            Width="28" Height="28"
-                            CornerRadius="8"
+                            Width="24" Height="24"
+                            CornerRadius="12"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             ClipToBounds="True"
@@ -131,8 +132,8 @@
 
                     <!-- Burst Merge Count Badge -->
                     <Border x:Name="BurstBadge"
-                            Width="16" Height="16"
-                            CornerRadius="8"
+                            Width="14" Height="14"
+                            CornerRadius="7"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Top"
                             Margin="0,-3,-3,0"
@@ -142,7 +143,7 @@
                             Visibility="Collapsed">
                         <TextBlock x:Name="BurstCountText"
                                    Text="4"
-                                   FontSize="9"
+                                   FontSize="8.5"
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource BurstBadgeForegroundBrush}"
                                    HorizontalAlignment="Center"
@@ -151,10 +152,10 @@
                 </Grid>
 
                 <!-- Column 1: Title and expandable Body Text -->
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
                     <TextBlock x:Name="TitleText"
                                Style="{DynamicResource TitleTextStyle}"
-                               FontSize="13.5"
+                               FontSize="13"
                                Text="Maya Chen" />
                     <Border x:Name="BodyHost" Height="0" Opacity="0" ClipToBounds="True">
                         <TextBlock x:Name="BodyText"

@@ -163,8 +163,8 @@
     </Storyboard>
 
     <!-- ── 4. HOVER OUT (COLLAPSE) STORYBOARD (240ms) ─────────────────────────
-         Fluidly contracts full notification (360x64) -> compact pill (280x48)
-         Icon shrinks 36 -> 28; Body text fades & collapses; Timestamp returns
+         Fluidly contracts full notification (360x64) -> compact pill (184x40)
+         Icon shrinks 36 -> 24; Body text fades & collapses; Timestamp returns
     ────────────────────────────────────────────────────────────────────── -->
     <Storyboard x:Key="HoverOutStoryboard">
         <DoubleAnimation Storyboard.TargetName="BodyHost"
@@ -194,7 +194,7 @@
 
         <DoubleAnimation Storyboard.TargetName="PillBorder"
                          Storyboard.TargetProperty="Width"
-                         To="260"
+                         To="184"
                          Duration="0:0:0.240">
             <DoubleAnimation.EasingFunction>
                 <CubicEase EasingMode="EaseInOut" />
@@ -203,7 +203,7 @@
 
         <DoubleAnimation Storyboard.TargetName="PillBorder"
                          Storyboard.TargetProperty="Height"
-                         To="46"
+                         To="40"
                          Duration="0:0:0.240">
             <DoubleAnimation.EasingFunction>
                 <CubicEase EasingMode="EaseInOut" />
@@ -212,7 +212,7 @@
 
         <ThicknessAnimation Storyboard.TargetName="ContentPanel"
                             Storyboard.TargetProperty="Margin"
-                            To="10,0,18,0"
+                            To="8,0,14,0"
                             Duration="0:0:0.240">
             <ThicknessAnimation.EasingFunction>
                 <CubicEase EasingMode="EaseInOut" />
@@ -221,7 +221,7 @@
 
         <DoubleAnimation Storyboard.TargetName="FallbackIcon"
                          Storyboard.TargetProperty="Width"
-                         To="28"
+                         To="24"
                          Duration="0:0:0.220">
             <DoubleAnimation.EasingFunction>
                 <CubicEase EasingMode="EaseInOut" />
@@ -229,7 +229,7 @@
         </DoubleAnimation>
         <DoubleAnimation Storyboard.TargetName="FallbackIcon"
                          Storyboard.TargetProperty="Height"
-                         To="28"
+                         To="24"
                          Duration="0:0:0.220">
             <DoubleAnimation.EasingFunction>
                 <CubicEase EasingMode="EaseInOut" />
@@ -238,7 +238,7 @@
 
         <DoubleAnimation Storyboard.TargetName="AppIconHost"
                          Storyboard.TargetProperty="Width"
-                         To="28"
+                         To="24"
                          Duration="0:0:0.220">
             <DoubleAnimation.EasingFunction>
                 <CubicEase EasingMode="EaseInOut" />
@@ -246,7 +246,7 @@
         </DoubleAnimation>
         <DoubleAnimation Storyboard.TargetName="AppIconHost"
                          Storyboard.TargetProperty="Height"
-                         To="28"
+                         To="24"
                          Duration="0:0:0.220">
             <DoubleAnimation.EasingFunction>
                 <CubicEase EasingMode="EaseInOut" />
@@ -255,7 +255,7 @@
 
         <DoubleAnimation Storyboard.TargetName="TitleText"
                          Storyboard.TargetProperty="FontSize"
-                         To="13.5"
+                         To="13"
                          Duration="0:0:0.220">
             <DoubleAnimation.EasingFunction>
                 <CubicEase EasingMode="EaseInOut" />
