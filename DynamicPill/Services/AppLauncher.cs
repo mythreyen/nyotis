@@ -10,7 +10,7 @@ public static class AppLauncher
 {
     public static void ActivateApp(PillItem item)
     {
-        if (TryForegroundExistingProcess(item.AppId))
+        if (TryForegroundExistingProcess(item.AppId, item.AppName))
             return;
 
         if (TryLaunchViaAppsFolder(item.AppId))
@@ -19,11 +19,27 @@ public static class AppLauncher
         OpenActionCenter();
     }
 
-    private static bool TryForegroundExistingProcess(string appId)
+    private static bool TryForegroundExistingProcess(string appId, string appName = "")
     {
         try
         {
-            string exeName = ExtractExeName(appId);
+            string targetName = appId;
+            if (appId.StartsWith("DynamicPill.", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(appName) && !appName.Equals("DynamicPill", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetName = appName;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            if (targetName.Equals("DynamicPill", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string exeName = ExtractExeName(targetName);
             if (string.IsNullOrEmpty(exeName))
                 return false;
 
