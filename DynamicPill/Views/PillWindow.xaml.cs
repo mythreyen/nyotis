@@ -114,6 +114,24 @@ public partial class PillWindow : Window
         }
     }
 
+    private Storyboard PlayStoryboard(string key, Action? onCompleted = null)
+    {
+        var template = (Storyboard)FindResource(key);
+        var sb = template.Clone();
+        if (onCompleted != null)
+        {
+            EventHandler? handler = null;
+            handler = (_, _) =>
+            {
+                sb.Completed -= handler;
+                onCompleted();
+            };
+            sb.Completed += handler;
+        }
+        sb.Begin(this, true);
+        return sb;
+    }
+
     private void OnShowRequested(PillItem item)
     {
         bool isExplicit = item.AppId.StartsWith("DynamicPill.");
@@ -132,65 +150,71 @@ public partial class PillWindow : Window
         _nativeWindow.SetClickThrough(false);
 
         _state = PillState.Entering;
-        var sb = FindStoryboard(_useReducedMotion ? "ReducedMotionEntranceStoryboard" : "EntranceStoryboard");
-        EventHandler? onEntranceCompleted = null;
-        onEntranceCompleted = (_, _) =>
+        string sbKey = _useReducedMotion ? "ReducedMotionEntranceStoryboard" : "EntranceStoryboard";
+        PlayStoryboard(sbKey, () =>
         {
-            sb.Completed -= onEntranceCompleted;
-            _state = PillState.Showing;
-            App.Log("[PillWindow] State = Showing (Compact initial pill)");
-        };
-        sb.Completed += onEntranceCompleted;
-        sb.Begin(this, true);
+            if (_state != PillState.Entering) return;
+
+            if (PillBorder.IsMouseOver)
+            {
+                Pill_MouseEnter(this, null);
+            }
+            else
+            {
+                _state = PillState.Showing;
+            }
+            App.Log($"[PillWindow] State = {_state} (Compact initial pill)");
+        });
     }
 
     private void OnDismissRequested()
     {
         App.Log($"[PillWindow] OnDismissRequested (Current state: {_state})");
-        if (_state == PillState.Idle || _state == PillState.Dismissed)
+        if (_state == PillState.Idle || _state == PillState.Dismissed || _state == PillState.Exiting)
             return;
 
         _state = PillState.Exiting;
-        var sb = FindStoryboard(_useReducedMotion ? "ReducedMotionRetractStoryboard" : "RetractStoryboard");
-        EventHandler? onRetractCompleted = null;
-        onRetractCompleted = (_, _) =>
+        string sbKey = _useReducedMotion ? "ReducedMotionRetractStoryboard" : "RetractStoryboard";
+        PlayStoryboard(sbKey, () =>
         {
-            sb.Completed -= onRetractCompleted;
+            if (_state != PillState.Exiting) return;
+
             _state = PillState.Idle;
             // Restore click-through so idle window never intercepts desktop clicks
             _nativeWindow.SetClickThrough(true);
             ResetToCompactState();
             App.Log("[PillWindow] State = Idle (ClickThrough restored)");
-        };
-        sb.Completed += onRetractCompleted;
-        sb.Begin(this, true);
+        });
     }
 
     private void OnSwapRequested(PillItem newItem)
     {
         App.Log($"[PillWindow] OnSwapRequested: '{newItem.Title}'");
+        bool wasHovered = _state == PillState.Hovered || PillBorder.IsMouseOver;
         _state = PillState.Swapping;
 
-        var collapse = FindStoryboard("SwapCollapseStoryboard");
-        EventHandler? onCollapseCompleted = null;
-        onCollapseCompleted = (_, _) =>
+        PlayStoryboard("SwapCollapseStoryboard", () =>
         {
-            collapse.Completed -= onCollapseCompleted;
+            if (_state != PillState.Swapping) return;
+
             UpdateContent(newItem);
 
-            var expand = FindStoryboard("SwapExpandStoryboard");
-            EventHandler? onExpandCompleted = null;
-            onExpandCompleted = (_, _) =>
+            PlayStoryboard("SwapExpandStoryboard", () =>
             {
-                expand.Completed -= onExpandCompleted;
-                _state = PillState.Showing;
-                App.Log("[PillWindow] Swap completed. State = Showing");
-            };
-            expand.Completed += onExpandCompleted;
-            expand.Begin(this, true);
-        };
-        collapse.Completed += onCollapseCompleted;
-        collapse.Begin(this, true);
+                if (_state != PillState.Swapping) return;
+
+                if (wasHovered || PillBorder.IsMouseOver)
+                {
+                    _state = PillState.Hovered;
+                    _presenter?.NotifyHovered();
+                }
+                else
+                {
+                    _state = PillState.Showing;
+                }
+                App.Log($"[PillWindow] Swap completed. State = {_state}");
+            });
+        });
     }
 
     private void UpdateContent(PillItem item)
@@ -246,8 +270,7 @@ public partial class PillWindow : Window
 
         if (!_useReducedMotion)
         {
-            var hoverIn = FindStoryboard("HoverInStoryboard");
-            hoverIn.Begin(this, true);
+            PlayStoryboard("HoverInStoryboard");
         }
         else
         {
@@ -269,7 +292,7 @@ public partial class PillWindow : Window
 
     private void Pill_MouseLeave(object sender, MouseEventArgs? e)
     {
-        if (_state != PillState.Hovered)
+        if (_state != PillState.Hovered && PillBorder.ActualWidth <= 184)
             return;
 
         _state = PillState.Showing;
@@ -287,8 +310,7 @@ public partial class PillWindow : Window
 
         if (!_useReducedMotion)
         {
-            var hoverOut = FindStoryboard("HoverOutStoryboard");
-            hoverOut.Begin(this, true);
+            PlayStoryboard("HoverOutStoryboard");
         }
         else
         {
@@ -298,18 +320,30 @@ public partial class PillWindow : Window
 
     private void Pill_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        // Don't capture mouse if click is targeting the CloseButton
+        if (CloseButton.IsMouseOver)
+            return;
+
         _mouseDownPos = e.GetPosition(this);
-        _isDragging = true;
+        _isDragging = false;
         PillBorder.CaptureMouse();
     }
 
     private void Pill_MouseMove(object sender, MouseEventArgs e)
     {
-        if (!_isDragging || e.LeftButton != MouseButtonState.Pressed)
+        if (!PillBorder.IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed)
             return;
 
         Point currentPos = e.GetPosition(this);
         double deltaY = currentPos.Y - _mouseDownPos.Y;
+
+        // Drag threshold of 4 DIPs before starting drag
+        if (!_isDragging)
+        {
+            if (Math.Abs(deltaY) < 4)
+                return;
+            _isDragging = true;
+        }
 
         if (deltaY < 0)
         {
@@ -333,10 +367,14 @@ public partial class PillWindow : Window
 
     private void Pill_Click(object sender, MouseButtonEventArgs e)
     {
+        if (PillBorder.IsMouseCaptured)
+        {
+            PillBorder.ReleaseMouseCapture();
+        }
+
         if (_isDragging)
         {
             _isDragging = false;
-            PillBorder.ReleaseMouseCapture();
 
             if (_state != PillState.Exiting)
             {
@@ -345,7 +383,7 @@ public partial class PillWindow : Window
             return;
         }
 
-        // Click pill body -> activate app
+        // Clean click on pill body -> activate app
         var currentItem = _presenter?.CurrentItem;
         if (currentItem != null)
         {
@@ -353,6 +391,16 @@ public partial class PillWindow : Window
         }
 
         _presenter?.DismissImmediate();
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        if (_isDragging && _state != PillState.Exiting)
+        {
+            PillTranslate.Y = 16;
+        }
+        _isDragging = false;
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -363,24 +411,21 @@ public partial class PillWindow : Window
 
     private void SwipeDismiss()
     {
+        if (_state == PillState.Idle || _state == PillState.Dismissed || _state == PillState.Exiting)
+            return;
+
         _state = PillState.Exiting;
-        var sb = FindStoryboard("SwipeDismissStoryboard");
-        EventHandler? onSwipeCompleted = null;
-        onSwipeCompleted = (_, _) =>
+        PlayStoryboard("SwipeDismissStoryboard", () =>
         {
-            sb.Completed -= onSwipeCompleted;
+            if (_state != PillState.Exiting) return;
+
             _state = PillState.Idle;
             _nativeWindow.SetClickThrough(true);
-        };
-        sb.Completed += onSwipeCompleted;
-        sb.Begin(this, true);
+            ResetToCompactState();
+            App.Log("[PillWindow] Swipe dismiss completed. State = Idle");
+        });
 
         _presenter?.DismissImmediate();
-    }
-
-    private Storyboard FindStoryboard(string key)
-    {
-        return (Storyboard)FindResource(key);
     }
 
     public void TriggerDemoNotification(string title, string body, string appId = "DynamicPill.Demo")
