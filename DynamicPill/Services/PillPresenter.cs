@@ -15,7 +15,6 @@ public sealed class PillPresenter : IDisposable
 {
     private const int MaxQueueSize = 20;
     private const int BurstThreshold = 5;
-    private const double NormalDisplaySeconds = 4.5;
     private const double ShortenedDisplaySeconds = 2.5;
     private const int MinIntervalMs = 600;
     private const int DedupeWindowMs = 2000;
@@ -30,7 +29,10 @@ public sealed class PillPresenter : IDisposable
     private DateTime _lastShowTime = DateTime.MinValue;
     private bool _isHovered;
 
+    private readonly object _recentItemsLock = new();
     private readonly List<(PillItem Item, DateTime Time)> _recentItems = new();
+
+    public double NormalDisplaySeconds { get; set; } = 4.5;
 
     public event Action<PillItem>? ShowRequested;
     public event Action? DismissRequested;
@@ -55,30 +57,33 @@ public sealed class PillPresenter : IDisposable
     public void Enqueue(PillItem item)
     {
         var now = DateTime.UtcNow;
-        CleanupRecent(now);
-
-        // Deduplication
-        bool isDuplicate = _recentItems.Any(r =>
-            r.Item.AppId == item.AppId &&
-            r.Item.Title == item.Title &&
-            r.Item.Body == item.Body &&
-            (now - r.Time).TotalMilliseconds < DedupeWindowMs);
-
-        if (isDuplicate)
+        lock (_recentItemsLock)
         {
-            Debug.WriteLine($"[PillPresenter] Deduplicated toast: {item.Title}");
-            return;
-        }
+            CleanupRecent(now);
 
-        _recentItems.Add((item, now));
+            // Deduplication
+            bool isDuplicate = _recentItems.Any(r =>
+                r.Item.AppId == item.AppId &&
+                r.Item.Title == item.Title &&
+                r.Item.Body == item.Body &&
+                (now - r.Time).TotalMilliseconds < DedupeWindowMs);
 
-        // Burst merge check for same app
-        int sameAppCount = _recentItems.Count(r => r.Item.AppId == item.AppId);
-        if (sameAppCount >= BurstMergeThreshold)
-        {
-            item.MergeCount = sameAppCount;
-            item.Title = $"{item.AppName} · {sameAppCount} new messages";
-            item.Body = $"Latest: {item.Body}";
+            if (isDuplicate)
+            {
+                Debug.WriteLine($"[PillPresenter] Deduplicated toast: {item.Title}");
+                return;
+            }
+
+            _recentItems.Add((item, now));
+
+            // Burst merge check for same app
+            int sameAppCount = _recentItems.Count(r => r.Item.AppId == item.AppId);
+            if (sameAppCount >= BurstMergeThreshold)
+            {
+                item.MergeCount = sameAppCount;
+                item.Title = $"{item.AppName} · {sameAppCount} new messages";
+                item.Body = $"Latest: {item.Body}";
+            }
         }
 
         _channel.Writer.TryWrite(item);
@@ -93,8 +98,11 @@ public sealed class PillPresenter : IDisposable
     public void NotifyUnhovered()
     {
         _isHovered = false;
-        // Resume with 2.0s remaining
-        StartDismissTimer(TimeSpan.FromSeconds(2.0));
+        if (_currentItem != null)
+        {
+            // Resume with 2.0s remaining
+            StartDismissTimer(TimeSpan.FromSeconds(2.0));
+        }
     }
 
     public void DismissImmediate()
@@ -158,17 +166,23 @@ public sealed class PillPresenter : IDisposable
 
     private void StartDismissTimer(TimeSpan duration)
     {
-        _dismissTimer?.Stop();
-        _dismissTimer = new DispatcherTimer { Interval = duration };
-        _dismissTimer.Tick += (_, _) =>
+        if (_dismissTimer == null)
         {
-            _dismissTimer.Stop();
-            if (_isHovered) return;
-
-            _currentItem = null;
-            DismissRequested?.Invoke();
-        };
+            _dismissTimer = new DispatcherTimer();
+            _dismissTimer.Tick += OnDismissTimerTick;
+        }
+        _dismissTimer.Stop();
+        _dismissTimer.Interval = duration;
         _dismissTimer.Start();
+    }
+
+    private void OnDismissTimerTick(object? sender, EventArgs e)
+    {
+        _dismissTimer?.Stop();
+        if (_isHovered) return;
+
+        _currentItem = null;
+        DismissRequested?.Invoke();
     }
 
     private TimeSpan GetDisplayDuration()

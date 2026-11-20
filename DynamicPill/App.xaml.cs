@@ -524,7 +524,11 @@ public partial class App : Application
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
         }
-        _singleInstanceMutex?.ReleaseMutex();
+        try
+        {
+            _singleInstanceMutex?.ReleaseMutex();
+        }
+        catch { }
         _singleInstanceMutex?.Dispose();
         base.OnExit(e);
         Log("OnExit finished.");
