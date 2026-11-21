@@ -85,7 +85,7 @@
             <Border.RenderTransform>
                 <TransformGroup>
                     <ScaleTransform x:Name="PillScale" ScaleX="1.0" ScaleY="1.0" />
-                    <TranslateTransform x:Name="PillTranslate" Y="-80" />
+                    <TranslateTransform x:Name="PillTranslate" Y="-48" />
                 </TransformGroup>
             </Border.RenderTransform>
 

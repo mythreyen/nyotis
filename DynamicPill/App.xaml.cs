@@ -147,6 +147,15 @@ public partial class App : Application
             Body = "Pill overlay initialized. Click or right-click tray icon.",
             Timestamp = DateTimeOffset.Now
         });
+
+        if (e.Args.Contains("--settings") || e.Args.Contains("-s"))
+        {
+            _settingsWindow = new SettingsWindow(_pillWindow!, _presenter!);
+            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+            _settingsWindow.Show();
+            _settingsWindow.Activate();
+            Log("Settings window shown on launch via --settings.");
+        }
     }
 
     private static Icon CreatePillTrayIcon()

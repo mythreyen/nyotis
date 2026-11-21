@@ -45,6 +45,40 @@ public static class AppLauncher
 
             string procName = Path.GetFileNameWithoutExtension(exeName);
             var processes = Process.GetProcessesByName(procName);
+            if (processes.Length == 0 && !string.IsNullOrWhiteSpace(appName))
+            {
+                processes = Process.GetProcessesByName(appName);
+            }
+
+            if (processes.Length == 0 && !string.IsNullOrWhiteSpace(appName))
+            {
+                string cleanName = appName.Replace(" ", "");
+                processes = Process.GetProcessesByName(cleanName);
+            }
+
+            if (processes.Length == 0 && !string.IsNullOrWhiteSpace(appName))
+            {
+                string[] candidates = appName.ToLowerInvariant() switch
+                {
+                    var s when s.Contains("chrome") => ["chrome"],
+                    var s when s.Contains("firefox") => ["firefox"],
+                    var s when s.Contains("edge") => ["msedge"],
+                    var s when s.Contains("code") || s.Contains("visual studio") => ["Code", "devenv"],
+                    var s when s.Contains("teams") => ["ms-teams", "Teams"],
+                    var s when s.Contains("slack") => ["slack"],
+                    var s when s.Contains("discord") => ["Discord"],
+                    var s when s.Contains("spotify") => ["Spotify"],
+                    var s when s.Contains("whatsapp") => ["WhatsApp"],
+                    var s when s.Contains("telegram") => ["Telegram"],
+                    var s when s.Contains("outlook") || s.Contains("mail") => ["OUTLOOK", "HxOutlook"],
+                    _ => []
+                };
+                foreach (var candidate in candidates)
+                {
+                    processes = Process.GetProcessesByName(candidate);
+                    if (processes.Length > 0) break;
+                }
+            }
 
             foreach (var proc in processes)
             {
