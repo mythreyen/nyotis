@@ -118,18 +118,19 @@ public sealed class PillPresenter : IDisposable
         {
             try
             {
-                // Rate limit
-                var elapsed = DateTime.UtcNow - _lastShowTime;
-                if (elapsed.TotalMilliseconds < MinIntervalMs)
-                {
-                    await Task.Delay(MinIntervalMs - (int)elapsed.TotalMilliseconds, ct);
-                }
-
                 if (_currentItem != null)
                 {
+                    // Item currently showing -> apply snappy swap rate limit
+                    var elapsed = DateTime.UtcNow - _lastShowTime;
+                    const int minSwapIntervalMs = 200;
+                    if (elapsed.TotalMilliseconds < minSwapIntervalMs)
+                    {
+                        await Task.Delay(minSwapIntervalMs - (int)elapsed.TotalMilliseconds, ct);
+                    }
+
                     // Item currently showing -> trigger Swap transition
                     _dispatcher.Invoke(() => _dismissTimer?.Stop());
-                    await Task.Delay(140, ct); // Wait collapse duration
+                    await Task.Delay(100, ct); // Snappy collapse duration
 
                     _currentItem = item;
                     _lastShowTime = DateTime.UtcNow;
@@ -138,11 +139,11 @@ public sealed class PillPresenter : IDisposable
                     {
                         SwapRequested?.Invoke(item);
                         StartDismissTimer(GetDisplayDuration());
-                    });
+                    }, DispatcherPriority.Send);
                 }
                 else
                 {
-                    // Full entrance
+                    // Full entrance when idle - ZERO delay! Immediate high-priority dispatch
                     _currentItem = item;
                     _lastShowTime = DateTime.UtcNow;
 
@@ -150,7 +151,7 @@ public sealed class PillPresenter : IDisposable
                     {
                         ShowRequested?.Invoke(item);
                         StartDismissTimer(GetDisplayDuration());
-                    });
+                    }, DispatcherPriority.Send);
                 }
             }
             catch (OperationCanceledException)

@@ -1,6 +1,7 @@
 namespace DynamicPill.Services;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -14,17 +15,23 @@ using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 
 /// <summary>
-/// Service listening for incoming Windows Action Center / Toast notifications
-/// using the WinRT UserNotificationListener API in unpackaged desktop mode.
+/// Ultra-low latency service listening for incoming Windows Action Center / Toast notifications
+/// using high-frequency polling (60ms) and in-memory icon caching for near-instantaneous response.
 /// </summary>
 public sealed class NotificationListenerService : IDisposable
 {
+    private const int FastPollIntervalMs = 60;
+    private const int InitialPollDelayMs = 50;
+
     private UserNotificationListener? _listener;
     private bool _isListening;
     private readonly HashSet<uint> _seenNotificationIds = new();
     private readonly object _lock = new();
     private Timer? _pollTimer;
     private int _isPolling;
+
+    // In-memory icon cache by AppId for 0ms lookup latency
+    private static readonly ConcurrentDictionary<string, ImageSource> _iconCache = new();
 
     public event Action<PillItem>? NotificationReceived;
 
@@ -49,8 +56,7 @@ public sealed class NotificationListenerService : IDisposable
 
             _isListening = true;
 
-            // Populate existing notification IDs so we don't spam ancient historical toasts,
-            // but keep anything received within the last 15 minutes so recent toasts (e.g. during testing) come through.
+            // Populate existing notification IDs and warm icon cache
             try
             {
                 var existing = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
@@ -63,34 +69,29 @@ public sealed class NotificationListenerService : IDisposable
                         {
                             _seenNotificationIds.Add(n.Id);
                         }
+
+                        // Pre-warm the icon cache in background for instant lookups later
+                        if (n.AppInfo?.AppUserModelId != null && !_iconCache.ContainsKey(n.AppInfo.AppUserModelId))
+                        {
+                            _ = PrewarmIconAsync(n);
+                        }
                     }
                 }
-                App.Log($"[NotificationListener] Initialized cache with {existing.Count} total existing toasts (filtered older than {cutoff:HH:mm:ss}).");
+                App.Log($"[NotificationListener] Initialized cache with {existing.Count} total existing toasts.");
             }
             catch (Exception ex)
             {
                 App.Log($"[NotificationListener] Initial cache load error: {ex.Message}");
             }
 
-            // Hook live NotificationChanged event if supported
-            try
-            {
-                _listener.NotificationChanged += OnNotificationChanged;
-                App.Log("[NotificationListener] Subscribed to live NotificationChanged event.");
-            }
-            catch (Exception ex)
-            {
-                App.Log($"[NotificationListener] NotificationChanged event registration note: {ex.Message}");
-            }
-
-            // Start polling timer every 500ms as reliable fallback across all Windows editions
+            // Start high-frequency polling timer (60ms interval, ~16fps query)
             _pollTimer = new Timer(
                 callback: _ => PollNotifications(),
                 state: null,
-                dueTime: TimeSpan.FromSeconds(1),
-                period: TimeSpan.FromMilliseconds(500));
+                dueTime: TimeSpan.FromMilliseconds(InitialPollDelayMs),
+                period: TimeSpan.FromMilliseconds(FastPollIntervalMs));
 
-            App.Log("[NotificationListener] Successfully started listening.");
+            App.Log($"[NotificationListener] High-performance polling started ({FastPollIntervalMs}ms interval).");
             return true;
         }
         catch (Exception ex)
@@ -105,36 +106,39 @@ public sealed class NotificationListenerService : IDisposable
         _isListening = false;
         _pollTimer?.Dispose();
         _pollTimer = null;
-        if (_listener != null)
-        {
-            try
-            {
-                _listener.NotificationChanged -= OnNotificationChanged;
-            }
-            catch { }
-        }
         App.Log("[NotificationListener] Stopped.");
     }
 
-    private async void OnNotificationChanged(UserNotificationListener sender, UserNotificationChangedEventArgs args)
+    private static async Task PrewarmIconAsync(UserNotification notification)
     {
-        if (!_isListening) return;
-
-        if (args.ChangeKind == UserNotificationChangedKind.Added)
+        try
         {
-            try
+            string appId = notification.AppInfo?.AppUserModelId ?? string.Empty;
+            if (string.IsNullOrEmpty(appId) || _iconCache.ContainsKey(appId)) return;
+
+            var logoRef = notification.AppInfo?.DisplayInfo?.GetLogo(new Windows.Foundation.Size(36, 36));
+            if (logoRef != null)
             {
-                var notification = sender.GetNotification(args.UserNotificationId);
-                if (notification != null)
+                using var cts = new CancellationTokenSource(1000);
+                var stream = await logoRef.OpenReadAsync().AsTask(cts.Token);
+                if (stream != null)
                 {
-                    await ProcessNotificationAsync(notification);
+                    using var memStream = new MemoryStream();
+                    await stream.AsStreamForRead().CopyToAsync(memStream, cts.Token);
+                    memStream.Position = 0;
+
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.StreamSource = memStream;
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.DecodePixelWidth = 72;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+                    _iconCache[appId] = bitmap;
                 }
             }
-            catch (Exception ex)
-            {
-                App.Log($"[NotificationListener] NotificationChanged handling error: {ex.Message}");
-            }
         }
+        catch { }
     }
 
     private async Task ProcessNotificationAsync(UserNotification notification)
@@ -151,10 +155,8 @@ public sealed class NotificationListenerService : IDisposable
         if (pillItem != null)
         {
             App.Log($"[NotificationListener] Forwarding toast: [{pillItem.AppName}] '{pillItem.Title}' - '{pillItem.Body}'");
-            Application.Current?.Dispatcher.BeginInvoke(() =>
-            {
-                NotificationReceived?.Invoke(pillItem);
-            });
+            // Invoke directly on threadpool without Dispatcher queue hopping to minimize dispatch latency
+            NotificationReceived?.Invoke(pillItem);
         }
     }
 
@@ -163,6 +165,7 @@ public sealed class NotificationListenerService : IDisposable
         if (!_isListening || _listener == null)
             return;
 
+        // Prevent overlapping polls if a system call stalls
         if (Interlocked.CompareExchange(ref _isPolling, 1, 0) != 0)
             return;
 
@@ -175,7 +178,7 @@ public sealed class NotificationListenerService : IDisposable
                 await ProcessNotificationAsync(notification);
             }
 
-            // Clean up old cached IDs
+            // Clean up dismissed IDs
             lock (_lock)
             {
                 var currentIds = new HashSet<uint>(notifications.Select(n => n.Id));
@@ -215,34 +218,38 @@ public sealed class NotificationListenerService : IDisposable
             string appId = notification.AppInfo?.AppUserModelId ?? "Unknown";
             string appName = notification.AppInfo?.DisplayInfo?.DisplayName ?? appId;
 
-            ImageSource? icon = null;
-            try
+            // Fast-path: Check in-memory icon cache for 0ms retrieval
+            if (!_iconCache.TryGetValue(appId, out ImageSource? icon))
             {
-                var logoRef = notification.AppInfo?.DisplayInfo?.GetLogo(new Windows.Foundation.Size(36, 36));
-                if (logoRef != null)
+                try
                 {
-                    using var cts = new CancellationTokenSource(1000);
-                    var stream = await logoRef.OpenReadAsync().AsTask(cts.Token);
-                    if (stream != null)
+                    var logoRef = notification.AppInfo?.DisplayInfo?.GetLogo(new Windows.Foundation.Size(36, 36));
+                    if (logoRef != null)
                     {
-                        using var memStream = new MemoryStream();
-                        await stream.AsStreamForRead().CopyToAsync(memStream, cts.Token);
-                        memStream.Position = 0;
+                        using var cts = new CancellationTokenSource(500);
+                        var stream = await logoRef.OpenReadAsync().AsTask(cts.Token);
+                        if (stream != null)
+                        {
+                            using var memStream = new MemoryStream();
+                            await stream.AsStreamForRead().CopyToAsync(memStream, cts.Token);
+                            memStream.Position = 0;
 
-                        var bitmap = new BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.StreamSource = memStream;
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.DecodePixelWidth = 72; // 2x for high DPI
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-                        icon = bitmap;
+                            var bitmap = new BitmapImage();
+                            bitmap.BeginInit();
+                            bitmap.StreamSource = memStream;
+                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                            bitmap.DecodePixelWidth = 72; // 2x for high DPI
+                            bitmap.EndInit();
+                            bitmap.Freeze();
+                            icon = bitmap;
+                            _iconCache[appId] = bitmap;
+                        }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                App.Log($"[NotificationListener] Icon extract note for {appName}: {ex.Message}");
+                catch (Exception ex)
+                {
+                    App.Log($"[NotificationListener] Icon extract note for {appName}: {ex.Message}");
+                }
             }
 
             return new PillItem
