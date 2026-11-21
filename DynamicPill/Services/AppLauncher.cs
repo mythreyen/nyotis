@@ -45,6 +45,10 @@ public static class AppLauncher
 
             string procName = Path.GetFileNameWithoutExtension(exeName);
             var processes = Process.GetProcessesByName(procName);
+            if (processes.Length == 0 && !string.IsNullOrWhiteSpace(appName))
+            {
+                processes = Process.GetProcessesByName(appName);
+            }
 
             foreach (var proc in processes)
             {
