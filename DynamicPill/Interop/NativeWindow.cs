@@ -85,19 +85,7 @@ public sealed class NativeWindow
 
     public static bool ShouldSuppressNotifications(bool isExplicitTrigger = false)
     {
-        if (isExplicitTrigger)
-            return false;
-
-        int hr = SHQueryUserNotificationState(out var state);
-        if (hr != 0) return false;
-
-        App.Log($"[NativeWindow] SHQueryUserNotificationState = {state}");
-
-        return state switch
-        {
-            QUERY_USER_NOTIFICATION_STATE.QUNS_RUNNING_D3D_FULL_SCREEN => true,
-            QUERY_USER_NOTIFICATION_STATE.QUNS_PRESENTATION_MODE => true,
-            _ => false
-        };
+        // Ensure all app notifications are passed through and none are left out
+        return false;
     }
 }

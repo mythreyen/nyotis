@@ -13,7 +13,7 @@ using DynamicPill.Models;
 
 public sealed class PillPresenter : IDisposable
 {
-    private const int MaxQueueSize = 20;
+    private const int MaxQueueSize = 100;
     private const int BurstThreshold = 5;
     private const double ShortenedDisplaySeconds = 2.5;
     private const int MinIntervalMs = 600;
@@ -61,11 +61,12 @@ public sealed class PillPresenter : IDisposable
         {
             CleanupRecent(now);
 
-            // Deduplication
+            // Deduplication: only drop if it's the exact same notification ID or an untagged repeat
             bool isDuplicate = _recentItems.Any(r =>
                 r.Item.AppId == item.AppId &&
                 r.Item.Title == item.Title &&
                 r.Item.Body == item.Body &&
+                (item.Id > 0 ? r.Item.Id == item.Id : true) &&
                 (now - r.Time).TotalMilliseconds < DedupeWindowMs);
 
             if (isDuplicate)

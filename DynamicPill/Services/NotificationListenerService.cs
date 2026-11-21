@@ -15,8 +15,9 @@ using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 
 /// <summary>
-/// Ultra-low latency service listening for incoming Windows Action Center / Toast notifications
-/// using high-frequency polling (60ms) and in-memory icon caching for near-instantaneous response.
+/// Service listening for incoming Windows Action Center / Toast notifications
+/// across all applications with zero drops, robust fallback extraction,
+/// and support for in-place updated toasts.
 /// </summary>
 public sealed class NotificationListenerService : IDisposable
 {
@@ -25,12 +26,16 @@ public sealed class NotificationListenerService : IDisposable
 
     private UserNotificationListener? _listener;
     private bool _isListening;
-    private readonly HashSet<uint> _seenNotificationIds = new();
+
+    // Track notification ID -> content signature so that:
+    // 1. Identical toasts are not duplicated.
+    // 2. In-place updated toasts with the same ID (e.g. messaging apps, download progress) are caught immediately.
+    private readonly Dictionary<uint, string> _seenNotifications = new();
     private readonly object _lock = new();
     private Timer? _pollTimer;
     private int _isPolling;
 
-    // In-memory icon cache by AppId for 0ms lookup latency
+    // In-memory icon cache by AppId for 0ms retrieval latency
     private static readonly ConcurrentDictionary<string, ImageSource> _iconCache = new();
 
     public event Action<PillItem>? NotificationReceived;
@@ -56,25 +61,33 @@ public sealed class NotificationListenerService : IDisposable
 
             _isListening = true;
 
-            // Populate existing notification IDs and warm icon cache
+            // Populate existing notification IDs so we don't flood on initial startup,
+            // but keep anything received within the last 5 minutes.
             try
             {
                 var existing = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
-                var cutoff = DateTimeOffset.Now.AddMinutes(-15);
+                var cutoff = DateTimeOffset.Now.AddMinutes(-5);
                 lock (_lock)
                 {
                     foreach (var n in existing)
                     {
-                        if (n.CreationTime < cutoff)
+                        DateTimeOffset time = DateTimeOffset.MinValue;
+                        try { time = n.CreationTime; } catch { }
+
+                        if (time < cutoff)
                         {
-                            _seenNotificationIds.Add(n.Id);
+                            _seenNotifications[n.Id] = string.Empty;
                         }
 
-                        // Pre-warm the icon cache in background for instant lookups later
-                        if (n.AppInfo?.AppUserModelId != null && !_iconCache.ContainsKey(n.AppInfo.AppUserModelId))
+                        // Pre-warm the icon cache in background
+                        try
                         {
-                            _ = PrewarmIconAsync(n);
+                            if (n.AppInfo?.AppUserModelId != null && !_iconCache.ContainsKey(n.AppInfo.AppUserModelId))
+                            {
+                                _ = PrewarmIconAsync(n);
+                            }
                         }
+                        catch { }
                     }
                 }
                 App.Log($"[NotificationListener] Initialized cache with {existing.Count} total existing toasts.");
@@ -84,7 +97,7 @@ public sealed class NotificationListenerService : IDisposable
                 App.Log($"[NotificationListener] Initial cache load error: {ex.Message}");
             }
 
-            // Start high-frequency polling timer (60ms interval, ~16fps query)
+            // Start high-frequency polling timer (60ms interval, ~16 queries/sec)
             _pollTimer = new Timer(
                 callback: _ => PollNotifications(),
                 state: null,
@@ -113,7 +126,8 @@ public sealed class NotificationListenerService : IDisposable
     {
         try
         {
-            string appId = notification.AppInfo?.AppUserModelId ?? string.Empty;
+            string appId = string.Empty;
+            try { appId = notification.AppInfo?.AppUserModelId ?? string.Empty; } catch { }
             if (string.IsNullOrEmpty(appId) || _iconCache.ContainsKey(appId)) return;
 
             var logoRef = notification.AppInfo?.DisplayInfo?.GetLogo(new Windows.Foundation.Size(36, 36));
@@ -143,21 +157,22 @@ public sealed class NotificationListenerService : IDisposable
 
     private async Task ProcessNotificationAsync(UserNotification notification)
     {
+        var pillItem = await ExtractPillItemAsync(notification);
+
+        string signature = $"{pillItem.Title}|{pillItem.Body}";
         lock (_lock)
         {
-            if (_seenNotificationIds.Contains(notification.Id))
+            if (_seenNotifications.TryGetValue(notification.Id, out string? prevSig) && prevSig == signature)
+            {
+                // Exact same content already processed
                 return;
+            }
 
-            _seenNotificationIds.Add(notification.Id);
+            _seenNotifications[notification.Id] = signature;
         }
 
-        var pillItem = await ExtractPillItemAsync(notification);
-        if (pillItem != null)
-        {
-            App.Log($"[NotificationListener] Forwarding toast: [{pillItem.AppName}] '{pillItem.Title}' - '{pillItem.Body}'");
-            // Invoke directly on threadpool without Dispatcher queue hopping to minimize dispatch latency
-            NotificationReceived?.Invoke(pillItem);
-        }
+        App.Log($"[NotificationListener] Forwarding toast: [{pillItem.AppName}] '{pillItem.Title}' - '{pillItem.Body}' (ID: {pillItem.Id})");
+        NotificationReceived?.Invoke(pillItem);
     }
 
     private async void PollNotifications()
@@ -165,7 +180,6 @@ public sealed class NotificationListenerService : IDisposable
         if (!_isListening || _listener == null)
             return;
 
-        // Prevent overlapping polls if a system call stalls
         if (Interlocked.CompareExchange(ref _isPolling, 1, 0) != 0)
             return;
 
@@ -182,7 +196,11 @@ public sealed class NotificationListenerService : IDisposable
             lock (_lock)
             {
                 var currentIds = new HashSet<uint>(notifications.Select(n => n.Id));
-                _seenNotificationIds.IntersectWith(currentIds);
+                var toRemove = _seenNotifications.Keys.Where(k => !currentIds.Contains(k)).ToList();
+                foreach (var id in toRemove)
+                {
+                    _seenNotifications.Remove(id);
+                }
             }
         }
         catch (Exception ex)
@@ -195,31 +213,82 @@ public sealed class NotificationListenerService : IDisposable
         }
     }
 
-    private static async Task<PillItem?> ExtractPillItemAsync(UserNotification notification)
+    private static async Task<PillItem> ExtractPillItemAsync(UserNotification notification)
     {
+        string appId = "Unknown";
+        string appName = "Notification";
+        ImageSource? icon = null;
+
+        // 1. Safely extract AppId and AppName (handles NotImplementedException on unpackaged apps)
         try
         {
-            var toast = notification.Notification;
-            var visual = toast.Visual;
-            var binding = visual?.GetBinding(KnownNotificationBindings.ToastGeneric);
+            if (notification.AppInfo != null)
+            {
+                appId = notification.AppInfo.AppUserModelId ?? "Unknown";
+                appName = notification.AppInfo.DisplayInfo?.DisplayName ?? appId;
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Log($"[NotificationListener] AppInfo fallback for {notification.Id}: {ex.Message}");
+        }
 
-            if (binding == null)
-                return null;
+        // 2. Safely extract Visual Binding and Text Elements
+        var textList = new List<string>();
+        try
+        {
+            var visual = notification.Notification?.Visual;
+            var binding = visual?.GetBinding(KnownNotificationBindings.ToastGeneric)
+                          ?? visual?.Bindings?.FirstOrDefault();
 
-            var texts = binding.GetTextElements().ToList();
-            string title = texts.Count > 0 ? (texts[0].Text ?? string.Empty) : string.Empty;
-            string body = texts.Count > 1
-                ? string.Join(" · ", texts.Skip(1).Select(t => t.Text).Where(s => !string.IsNullOrWhiteSpace(s)))
+            if (binding != null)
+            {
+                foreach (var t in binding.GetTextElements())
+                {
+                    if (!string.IsNullOrWhiteSpace(t?.Text))
+                    {
+                        textList.Add(t.Text);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Log($"[NotificationListener] Visual binding read note: {ex.Message}");
+        }
+
+        // 3. Guarantee non-empty title and body so NO notification is ever dropped
+        string title;
+        string body;
+
+        if (textList.Count > 0)
+        {
+            title = textList[0];
+            body = textList.Count > 1
+                ? string.Join(" · ", textList.Skip(1))
                 : string.Empty;
+        }
+        else
+        {
+            title = !string.IsNullOrWhiteSpace(appName) && appName != "Unknown" ? appName : "Notification";
+            body = "New notification";
+        }
 
-            if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(body))
-                return null;
+        // 4. Safely extract Timestamp
+        DateTimeOffset timestamp = DateTimeOffset.Now;
+        try
+        {
+            timestamp = notification.CreationTime;
+        }
+        catch
+        {
+            timestamp = DateTimeOffset.Now;
+        }
 
-            string appId = notification.AppInfo?.AppUserModelId ?? "Unknown";
-            string appName = notification.AppInfo?.DisplayInfo?.DisplayName ?? appId;
-
-            // Fast-path: Check in-memory icon cache for 0ms retrieval
-            if (!_iconCache.TryGetValue(appId, out ImageSource? icon))
+        // 5. Fast-path icon extraction with in-memory cache
+        if (!string.IsNullOrEmpty(appId) && appId != "Unknown")
+        {
+            if (!_iconCache.TryGetValue(appId, out icon))
             {
                 try
                 {
@@ -238,7 +307,7 @@ public sealed class NotificationListenerService : IDisposable
                             bitmap.BeginInit();
                             bitmap.StreamSource = memStream;
                             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                            bitmap.DecodePixelWidth = 72; // 2x for high DPI
+                            bitmap.DecodePixelWidth = 72;
                             bitmap.EndInit();
                             bitmap.Freeze();
                             icon = bitmap;
@@ -251,23 +320,18 @@ public sealed class NotificationListenerService : IDisposable
                     App.Log($"[NotificationListener] Icon extract note for {appName}: {ex.Message}");
                 }
             }
+        }
 
-            return new PillItem
-            {
-                Id = notification.Id,
-                AppId = appId,
-                AppName = appName,
-                AppIcon = icon,
-                Title = title,
-                Body = body,
-                Timestamp = notification.CreationTime
-            };
-        }
-        catch (Exception ex)
+        return new PillItem
         {
-            App.Log($"[NotificationListener] ExtractPillItem error: {ex.Message}");
-            return null;
-        }
+            Id = notification.Id,
+            AppId = appId,
+            AppName = appName,
+            AppIcon = icon,
+            Title = title,
+            Body = body,
+            Timestamp = timestamp
+        };
     }
 
     public void Dispose()
