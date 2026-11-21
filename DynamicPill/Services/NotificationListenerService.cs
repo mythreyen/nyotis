@@ -2,7 +2,6 @@ namespace DynamicPill.Services;
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -16,14 +15,16 @@ using Windows.UI.Notifications.Management;
 
 /// <summary>
 /// Service listening for incoming Windows Action Center / Toast notifications
-/// using the WinRT UserNotificationListener API.
+/// using the WinRT UserNotificationListener API in unpackaged desktop mode.
 /// </summary>
 public sealed class NotificationListenerService : IDisposable
 {
     private UserNotificationListener? _listener;
     private bool _isListening;
     private readonly HashSet<uint> _seenNotificationIds = new();
+    private readonly object _lock = new();
     private Timer? _pollTimer;
+    private int _isPolling;
 
     public event Action<PillItem>? NotificationReceived;
 
@@ -31,17 +32,9 @@ public sealed class NotificationListenerService : IDisposable
     {
         try
         {
-            // Windows UserNotificationListener requires package identity (MSIX).
-            // Calling it from unpackaged Win32 causes RPC/COM exceptions or access violations.
-            if (!HasPackageIdentity())
-            {
-                Debug.WriteLine("[NotificationListener] Running in unpackaged desktop mode. Using IPC and tray hooks for notifications.");
-                return false;
-            }
-
             if (!Windows.Foundation.Metadata.ApiInformation.IsTypePresent("Windows.UI.Notifications.Management.UserNotificationListener"))
             {
-                Debug.WriteLine("[NotificationListener] UserNotificationListener is not supported on this Windows build.");
+                App.Log("[NotificationListener] UserNotificationListener is not supported on this Windows build.");
                 return false;
             }
 
@@ -50,51 +43,59 @@ public sealed class NotificationListenerService : IDisposable
 
             if (accessStatus != UserNotificationListenerAccessStatus.Allowed)
             {
-                Debug.WriteLine($"[NotificationListener] Access status: {accessStatus}");
+                App.Log($"[NotificationListener] Access status: {accessStatus}");
                 return false;
             }
 
             _isListening = true;
 
-            // Optional: Populate current notification IDs so we only alert on NEW incoming toasts
+            // Populate existing notification IDs so we don't spam ancient historical toasts,
+            // but keep anything received within the last 15 minutes so recent toasts (e.g. during testing) come through.
             try
             {
                 var existing = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
-                foreach (var n in existing)
+                var cutoff = DateTimeOffset.Now.AddMinutes(-15);
+                lock (_lock)
                 {
-                    _seenNotificationIds.Add(n.Id);
+                    foreach (var n in existing)
+                    {
+                        if (n.CreationTime < cutoff)
+                        {
+                            _seenNotificationIds.Add(n.Id);
+                        }
+                    }
                 }
+                App.Log($"[NotificationListener] Initialized cache with {existing.Count} total existing toasts (filtered older than {cutoff:HH:mm:ss}).");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[NotificationListener] Initial cache load error: {ex.Message}");
+                App.Log($"[NotificationListener] Initial cache load error: {ex.Message}");
             }
 
-            // Start polling timer every 500ms
+            // Hook live NotificationChanged event if supported
+            try
+            {
+                _listener.NotificationChanged += OnNotificationChanged;
+                App.Log("[NotificationListener] Subscribed to live NotificationChanged event.");
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[NotificationListener] NotificationChanged event registration note: {ex.Message}");
+            }
+
+            // Start polling timer every 500ms as reliable fallback across all Windows editions
             _pollTimer = new Timer(
                 callback: _ => PollNotifications(),
                 state: null,
                 dueTime: TimeSpan.FromSeconds(1),
                 period: TimeSpan.FromMilliseconds(500));
 
-            Debug.WriteLine("[NotificationListener] Successfully started listening.");
+            App.Log("[NotificationListener] Successfully started listening.");
             return true;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[NotificationListener] StartAsync exception: {ex}");
-            return false;
-        }
-    }
-
-    private static bool HasPackageIdentity()
-    {
-        try
-        {
-            return Windows.ApplicationModel.Package.Current?.Id != null;
-        }
-        catch
-        {
+            App.Log($"[NotificationListener] StartAsync exception: {ex}");
             return false;
         }
     }
@@ -104,12 +105,65 @@ public sealed class NotificationListenerService : IDisposable
         _isListening = false;
         _pollTimer?.Dispose();
         _pollTimer = null;
-        Debug.WriteLine("[NotificationListener] Stopped.");
+        if (_listener != null)
+        {
+            try
+            {
+                _listener.NotificationChanged -= OnNotificationChanged;
+            }
+            catch { }
+        }
+        App.Log("[NotificationListener] Stopped.");
+    }
+
+    private async void OnNotificationChanged(UserNotificationListener sender, UserNotificationChangedEventArgs args)
+    {
+        if (!_isListening) return;
+
+        if (args.ChangeKind == UserNotificationChangedKind.Added)
+        {
+            try
+            {
+                var notification = sender.GetNotification(args.UserNotificationId);
+                if (notification != null)
+                {
+                    await ProcessNotificationAsync(notification);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[NotificationListener] NotificationChanged handling error: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task ProcessNotificationAsync(UserNotification notification)
+    {
+        lock (_lock)
+        {
+            if (_seenNotificationIds.Contains(notification.Id))
+                return;
+
+            _seenNotificationIds.Add(notification.Id);
+        }
+
+        var pillItem = await ExtractPillItemAsync(notification);
+        if (pillItem != null)
+        {
+            App.Log($"[NotificationListener] Forwarding toast: [{pillItem.AppName}] '{pillItem.Title}' - '{pillItem.Body}'");
+            Application.Current?.Dispatcher.BeginInvoke(() =>
+            {
+                NotificationReceived?.Invoke(pillItem);
+            });
+        }
     }
 
     private async void PollNotifications()
     {
         if (!_isListening || _listener == null)
+            return;
+
+        if (Interlocked.CompareExchange(ref _isPolling, 1, 0) != 0)
             return;
 
         try
@@ -118,45 +172,42 @@ public sealed class NotificationListenerService : IDisposable
 
             foreach (var notification in notifications)
             {
-                if (_seenNotificationIds.Contains(notification.Id))
-                    continue;
-
-                _seenNotificationIds.Add(notification.Id);
-
-                var pillItem = ExtractPillItem(notification);
-                if (pillItem != null)
-                {
-                    Application.Current?.Dispatcher.BeginInvoke(() =>
-                    {
-                        NotificationReceived?.Invoke(pillItem);
-                    });
-                }
+                await ProcessNotificationAsync(notification);
             }
 
             // Clean up old cached IDs
-            var currentIds = new HashSet<uint>(notifications.Select(n => n.Id));
-            _seenNotificationIds.IntersectWith(currentIds);
+            lock (_lock)
+            {
+                var currentIds = new HashSet<uint>(notifications.Select(n => n.Id));
+                _seenNotificationIds.IntersectWith(currentIds);
+            }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[NotificationListener] Poll error: {ex.Message}");
+            App.Log($"[NotificationListener] Poll error: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isPolling, 0);
         }
     }
 
-    private static PillItem? ExtractPillItem(UserNotification notification)
+    private static async Task<PillItem?> ExtractPillItemAsync(UserNotification notification)
     {
         try
         {
             var toast = notification.Notification;
             var visual = toast.Visual;
-            var binding = visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+            var binding = visual?.GetBinding(KnownNotificationBindings.ToastGeneric);
 
             if (binding == null)
                 return null;
 
             var texts = binding.GetTextElements().ToList();
             string title = texts.Count > 0 ? (texts[0].Text ?? string.Empty) : string.Empty;
-            string body = texts.Count > 1 ? (texts[1].Text ?? string.Empty) : string.Empty;
+            string body = texts.Count > 1
+                ? string.Join(" · ", texts.Skip(1).Select(t => t.Text).Where(s => !string.IsNullOrWhiteSpace(s)))
+                : string.Empty;
 
             if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(body))
                 return null;
@@ -170,11 +221,12 @@ public sealed class NotificationListenerService : IDisposable
                 var logoRef = notification.AppInfo?.DisplayInfo?.GetLogo(new Windows.Foundation.Size(36, 36));
                 if (logoRef != null)
                 {
-                    var stream = logoRef.OpenReadAsync().GetAwaiter().GetResult();
+                    using var cts = new CancellationTokenSource(1000);
+                    var stream = await logoRef.OpenReadAsync().AsTask(cts.Token);
                     if (stream != null)
                     {
                         using var memStream = new MemoryStream();
-                        stream.AsStreamForRead().CopyTo(memStream);
+                        await stream.AsStreamForRead().CopyToAsync(memStream, cts.Token);
                         memStream.Position = 0;
 
                         var bitmap = new BitmapImage();
@@ -188,9 +240,9 @@ public sealed class NotificationListenerService : IDisposable
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Fallback glyph/color handled by PillItem
+                App.Log($"[NotificationListener] Icon extract note for {appName}: {ex.Message}");
             }
 
             return new PillItem
@@ -206,7 +258,7 @@ public sealed class NotificationListenerService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[NotificationListener] ExtractPillItem error: {ex.Message}");
+            App.Log($"[NotificationListener] ExtractPillItem error: {ex.Message}");
             return null;
         }
     }
